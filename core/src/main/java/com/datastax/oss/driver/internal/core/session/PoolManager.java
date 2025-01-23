@@ -53,6 +53,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.stream.Collectors;
 import net.jcip.annotations.ThreadSafe;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -221,18 +222,23 @@ public class PoolManager implements AsyncAutoCloseable {
       stateEventFilter.start();
 
       Collection<Node> nodes = context.getMetadataManager().getMetadata().getNodes().values();
-      List<CompletionStage<ChannelPool>> poolStages = new ArrayList<>(nodes.size());
+      Map<Node, CompletionStage<ChannelPool>> poolStageByNode = new HashMap<>(nodes.size());
       for (Node node : nodes) {
         NodeDistance distance = node.getDistance();
         if (distance == NodeDistance.IGNORED) {
           LOG.debug("[{}] Skipping {} because it is IGNORED", logPrefix, node);
         } else if (node.getState() == NodeState.FORCED_DOWN) {
           LOG.debug("[{}] Skipping {} because it is FORCED_DOWN", logPrefix, node);
+        } else if (poolStageByNode.containsKey(node)) {
+          LOG.warn("[{}] Skipping {} because pool for it is already created", logPrefix, node);
         } else {
           LOG.debug("[{}] Creating a pool for {}", logPrefix, node);
-          poolStages.add(channelPoolFactory.init(node, keyspace, distance, context, logPrefix));
+          poolStageByNode.put(
+              node, channelPoolFactory.init(node, keyspace, distance, context, logPrefix));
         }
       }
+      List<CompletionStage<ChannelPool>> poolStages =
+          poolStageByNode.values().stream().collect(Collectors.toList());
       CompletableFutures.whenAllDone(poolStages, () -> this.onPoolsInit(poolStages), adminExecutor);
     }
 

@@ -76,6 +76,12 @@ public class InitialNodeListRefreshTest {
             DefaultNodeInfo.builder()
                 .withEndPoint(contactPoint2.getEndPoint())
                 .withHostId(hostId2)
+                .build(),
+            DefaultNodeInfo.builder()
+                // AddressTranslator can translate node address to the contact point endpoint when
+                // behind proxy
+                .withEndPoint(contactPoint2.getEndPoint())
+                .withHostId(hostId3)
                 .build());
     InitialNodeListRefresh refresh =
         new InitialNodeListRefresh(newInfos, ImmutableSet.of(contactPoint1, contactPoint2));
@@ -86,11 +92,12 @@ public class InitialNodeListRefreshTest {
     // Then
     // contact points have been copied to the metadata, and completed with missing information
     Map<UUID, Node> newNodes = result.newMetadata.getNodes();
-    assertThat(newNodes).containsOnlyKeys(hostId1, hostId2);
+    assertThat(newNodes).containsOnlyKeys(hostId1, hostId2, hostId3);
     assertThat(newNodes.get(hostId1)).isEqualTo(contactPoint1);
     assertThat(contactPoint1.getHostId()).isEqualTo(hostId1);
     assertThat(newNodes.get(hostId2)).isEqualTo(contactPoint2);
-    assertThat(contactPoint2.getHostId()).isEqualTo(hostId2);
+    assertThat(newNodes.get(hostId3)).isEqualTo(contactPoint2);
+    assertThat(contactPoint2.getHostId()).isEqualTo(hostId3);
   }
 
   @Test
