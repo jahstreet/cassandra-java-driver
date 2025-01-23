@@ -275,6 +275,30 @@ public class DefaultSessionPoolsTest {
   }
 
   @Test
+  public void should_not_connect_to_same_nodes() {
+    ImmutableMap<UUID, Node> nodes =
+        ImmutableMap.of(
+            node1.getHostId(), node1,
+            node2.getHostId(), node1);
+    when(metadata.getNodes()).thenReturn(nodes);
+
+    ChannelPool pool1 = mockPool(node1);
+    MockChannelPoolFactoryHelper factoryHelper =
+        MockChannelPoolFactoryHelper.builder(channelPoolFactory)
+            // Initial connection
+            .success(node1, KEYSPACE, NodeDistance.LOCAL, pool1)
+            .build();
+
+    CompletionStage<CqlSession> initFuture = newSession();
+
+    factoryHelper.waitForCall(node1, KEYSPACE, NodeDistance.LOCAL);
+    factoryHelper.verifyNoMoreCalls();
+    assertThatStage(initFuture)
+        .isSuccess(
+            session -> assertThat(((DefaultSession) session).getPools()).containsValues(pool1));
+  }
+
+  @Test
   public void should_adjust_distance_if_changed_while_init() {
     CompletableFuture<ChannelPool> pool1Future = new CompletableFuture<>();
     CompletableFuture<ChannelPool> pool2Future = new CompletableFuture<>();
