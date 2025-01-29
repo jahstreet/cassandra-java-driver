@@ -230,7 +230,7 @@ public class PoolManager implements AsyncAutoCloseable {
         } else if (node.getState() == NodeState.FORCED_DOWN) {
           LOG.debug("[{}] Skipping {} because it is FORCED_DOWN", logPrefix, node);
         } else if (poolStageByNode.containsKey(node)) {
-          LOG.warn("[{}] Skipping {} because pool for it is already created", logPrefix, node);
+          LOG.debug("[{}] Skipping {} because pool for it is already created", logPrefix, node);
         } else {
           LOG.debug("[{}] Creating a pool for {}", logPrefix, node);
           poolStageByNode.put(
