@@ -120,6 +120,7 @@ public class ChannelPool implements AsyncAutoCloseable {
     return singleThreaded.connectFuture;
   }
 
+  // TODO: It is needed only for logging and linking that can be replaced with endpoint.
   public Node getNode() {
     return node;
   }

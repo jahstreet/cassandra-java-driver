@@ -72,6 +72,7 @@ public class PoolManager implements AsyncAutoCloseable {
   // This is read concurrently, but only updated from adminExecutor
   private volatile CqlIdentifier keyspace;
 
+  // How do we decide on stopping and removing pools if we index by endpoint?
   private final ConcurrentMap<Node, ChannelPool> pools =
       new ConcurrentHashMap<>(
           16,
@@ -223,22 +224,34 @@ public class PoolManager implements AsyncAutoCloseable {
 
       Collection<Node> nodes = context.getMetadataManager().getMetadata().getNodes().values();
       Map<Node, CompletionStage<ChannelPool>> poolStageByNode = new HashMap<>(nodes.size());
+      
+      Collection<EndPoint> endPoints = nodes.stream().map(Node::getEndPoint).collect(Collectors.toSet());
+      Map<EndPoint, CompletionStage<ChannelPool>> poolStageByEndPoint = new HashMap<>(nodes.size());
+      
       for (Node node : nodes) {
         NodeDistance distance = node.getDistance();
+        
+        // TODO: Add the switch here to decide whether to create pool per node or per endpoint.
         if (distance == NodeDistance.IGNORED) {
           LOG.debug("[{}] Skipping {} because it is IGNORED", logPrefix, node);
         } else if (node.getState() == NodeState.FORCED_DOWN) {
           LOG.debug("[{}] Skipping {} because it is FORCED_DOWN", logPrefix, node);
         } else if (poolStageByNode.containsKey(node)) {
-          LOG.debug("[{}] Skipping {} because pool for it is already created", logPrefix, node);
+          LOG.debug("[{}] Skipping {} because pool for its endpoint is already created", logPrefix, node);
+        } else if (poolStageByEndPoint.containsKey(node.getEndPoint())) {
+          LOG.debug("[{}] Reusing already created pool for {}", logPrefix, node);
+          poolStageByNode.put(node, poolStageByEndPoint.get(node.getEndPoint()));
         } else {
           LOG.debug("[{}] Creating a pool for {}", logPrefix, node);
-          poolStageByNode.put(
-              node, channelPoolFactory.init(node, keyspace, distance, context, logPrefix));
+          CompletionStage<ChannelPool> poolStage = channelPoolFactory.init(node, keyspace, distance, context, logPrefix);
+          poolStageByEndPoint.put(node.getEndPoint(), poolStage);
+          poolStageByNode.put(node, poolStage);
         }
       }
+
+
       List<CompletionStage<ChannelPool>> poolStages =
-          poolStageByNode.values().stream().collect(Collectors.toList());
+          poolStageByNode.values().stream().distinct().collect(Collectors.toList());
       CompletableFutures.whenAllDone(poolStages, () -> this.onPoolsInit(poolStages), adminExecutor);
     }
 

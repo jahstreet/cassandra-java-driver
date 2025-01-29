@@ -73,47 +73,32 @@ class InitialNodeListRefresh extends NodesRefresh {
             logPrefix,
             hostId);
       } else {
-        EndPoint endPoint = nodeInfo.getEndPoint();
-        DefaultNode node = findIn(contactPoints, endPoint);
-        if (node == null) {
-          node = new DefaultNode(endPoint, context);
-          LOG.debug("[{}] Adding new node {}", logPrefix, node);
-        } else {
-          LOG.debug("[{}] Copying contact point {}", logPrefix, node);
-        }
+        DefaultNode newNode = new DefaultNode(nodeInfo.getEndPoint(), context);
+        LOG.debug("[{}] Adding new node {}", logPrefix, newNode);
         if (tokenMapEnabled && tokenFactory == null && nodeInfo.getPartitioner() != null) {
           tokenFactory = tokenFactoryRegistry.tokenFactoryFor(nodeInfo.getPartitioner());
         }
-        copyInfos(nodeInfo, node, context);
-        newNodes.put(hostId, node);
+        copyInfos(newNodeInfo, newNode, context);
+        newNodes.put(hostId, newNode);
       }
     }
 
     ImmutableList.Builder<Object> eventsBuilder = ImmutableList.builder();
-
     for (DefaultNode newNode : newNodes.values()) {
-      if (findIn(contactPoints, newNode.getEndPoint()) == null) {
-        eventsBuilder.add(NodeStateEvent.added(newNode));
-      }
+      eventsBuilder.add(NodeStateEvent.added(newNode));
     }
+
+    // This should trigger control connection reconnet using added nodes, which won't contain contact point endpoints.
+    // So now driver would explicitly fail when connecting via LB w/o address translator.
+    // Contact points will really become the points to just make the initial connection, then we fully switch to
+    // broadcast rpc address and address translated endpoints.
     for (DefaultNode contactPoint : contactPoints) {
-      if (findIn(newNodes.values(), contactPoint.getEndPoint()) == null) {
-        eventsBuilder.add(NodeStateEvent.removed(contactPoint));
-      }
+      eventsBuilder.add(NodeStateEvent.removed(contactPoint));
     }
 
     return new Result(
         oldMetadata.withNodes(
             ImmutableMap.copyOf(newNodes), tokenMapEnabled, true, tokenFactory, context),
         eventsBuilder.build());
-  }
-
-  private DefaultNode findIn(Iterable<? extends Node> nodes, EndPoint endPoint) {
-    for (Node node : nodes) {
-      if (node.getEndPoint().equals(endPoint)) {
-        return (DefaultNode) node;
-      }
-    }
-    return null;
   }
 }
